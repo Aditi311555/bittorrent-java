@@ -1,68 +1,91 @@
+import com.dampcake.bencode.Bencode;
+import com.dampcake.bencode.Type;
 import com.google.gson.Gson;
 import java.util.ArrayList;
 import java.util.List;
-
+import java.util.Map;
+// import com.dampcake.bencode.Bencode; - available if you need it!
 public class Main {
-    private static final Gson gson = new Gson();
-    private static int currentIndex = 0; // To keep track of the position in the bencoded string
-
-    public static void main(String[] args) {
-        if (args.length < 2) {
-            System.out.println("Usage: decode <bencodedString>");
-            return;
-        }
-
-        String command = args[0];
-        if ("decode".equals(command)) {
-            String bencodedValue = args[1];
-            Object decoded;
-            try {
-                currentIndex = 0; // Reset index for each decode call
-                decoded = decodeBencode(bencodedValue);
-            } catch (RuntimeException e) {
-                System.out.println(e.getMessage());
-                return;
-            }
-            // Output should be formatted as expected
-            System.out.println(gson.toJson(decoded));
+  private static final Gson gson = new Gson();
+  public static void main(String[] args) throws Exception {
+    // You can use print statements as follows for debugging, they'll be visible
+    // when running tests.
+    String command = args[0];
+    if ("decode".equals(command)) {
+      //  Uncomment this block to pass the first stage
+      String bencodedValue = args[1];
+      String decoded;
+      try {
+        if (bencodedValue.charAt(0) == 'i') {
+          long decodedValue = decodeBencodeInt(bencodedValue);
+          System.out.println(decodedValue);
+        } else if (bencodedValue.charAt(0) == 'l') {
+          List<Object> decodedList = decodeList(bencodedValue);
+          System.out.println(gson.toJson(decodedList));
+        } else if (bencodedValue.charAt(0) == 'd') {
+          Map<String, Object> dict = decodeDict(bencodedValue);
+          System.out.println(gson.toJson(dict));
         } else {
-            System.out.println("Unknown command: " + command);
+          decoded = decodeBencode(bencodedValue);
+          System.out.println(gson.toJson(decoded));
         }
+      } catch (RuntimeException e) {
+        System.out.println(e.getMessage());
+        return;
+      }
+    } else {
+      System.out.println("Unknown command: " + command);
     }
-
-    static Object decodeBencode(String bencodedString) {
-        char startChar = bencodedString.charAt(currentIndex);
-
-        // Decode a string
-        if (Character.isDigit(startChar)) {
-            int firstColonIndex = currentIndex;
-            while (bencodedString.charAt(firstColonIndex) != ':') {
-                firstColonIndex++;
-            }
-            int length = Integer.parseInt(bencodedString.substring(currentIndex, firstColonIndex));
-            currentIndex = firstColonIndex + 1;
-            String str = bencodedString.substring(currentIndex, currentIndex + length);
-            currentIndex += length;
-            return str;
+  }
+  private static Map<String, Object> decodeDict(String bencodedValue) {
+    Bencode bencode = new Bencode();
+    return bencode.decode(bencodedValue.getBytes(), Type.DICTIONARY);
+  }
+  static String decodeBencode(String bencodedString) {
+    if (Character.isDigit(bencodedString.charAt(0))) {
+      int firstColonIndex = 0;
+      for (int i = 0; i < bencodedString.length(); i++) {
+        if (bencodedString.charAt(i) == ':') {
+          firstColonIndex = i;
+          break;
         }
-        // Decode an integer
-        else if (startChar == 'i') {
-            int endIndex = bencodedString.indexOf('e', currentIndex);
-            long number = Long.parseLong(bencodedString.substring(currentIndex + 1, endIndex));
-            currentIndex = endIndex + 1;
-            return number;
-        }
-        // Decode a list
-        else if (startChar == 'l') {
-            currentIndex++;
-            List<Object> list = new ArrayList<>();
-            while (bencodedString.charAt(currentIndex) != 'e') {
-                list.add(decodeBencode(bencodedString)); // Decode each element in the list
-            }
-            currentIndex++; // Move past 'e'
-            return list; // Return the decoded list
-        }
-        
-        throw new RuntimeException("Invalid bencoded format.");
+      }
+      int length =
+          Integer.parseInt(bencodedString.substring(0, firstColonIndex));
+      return bencodedString.substring(firstColonIndex + 1,
+                                      firstColonIndex + 1 + length);
+    } else {
+      throw new RuntimeException(
+          "Only strings and integers are supported at the moment");
     }
+  }
+  static long decodeBencodeInt(String bencodedString) {
+    if (bencodedString.charAt(0) == 'i') {
+      long value = 0;
+      int i = 1;
+      boolean flag = false;
+      while (true) {
+        if (bencodedString.charAt(i) == 'e') {
+          break;
+        } else if (bencodedString.charAt(i) == '-') {
+          flag = true;
+        } else {
+          value =
+              value * 10 + Character.getNumericValue(bencodedString.charAt(i));
+        }
+        i++;
+      }
+      if (flag)
+        return value * (-1);
+      else
+        return value;
+    } else {
+      throw new RuntimeException(
+          "Only strings and integers are supported at the moment");
+    }
+  }
+  static List<Object> decodeList(String bencode) {
+    Bencode b = new Bencode();
+    return b.decode(bencode.getBytes(), Type.LIST);
+  }
 }
