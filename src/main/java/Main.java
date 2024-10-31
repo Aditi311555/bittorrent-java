@@ -5,6 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 public class Main {
   private static final Gson gson = new Gson();
@@ -38,6 +40,7 @@ public class Main {
       Torrent torrent = new Torrent(Files.readAllBytes(Path.of(filePath)));
       System.out.println("Tracker URL: " + torrent.announce);
       System.out.println("Length: " + torrent.length);
+      System.out.println("Info Hash: "+bytesToHex(torrent.infoHash));
     } else {
       System.out.println("Unknown command: " + command);
     }
@@ -48,15 +51,31 @@ public class Main {
     return bencode.decode(bencodedValue.getBytes(), Type.DICTIONARY);
   }
 
-  static String decodeBencode(String bencodedString) {
-    if (Character.isDigit(bencodedString.charAt(0))) {
-      int firstColonIndex = bencodedString.indexOf(':');
-      int length = Integer.parseInt(bencodedString.substring(0, firstColonIndex));
-      return bencodedString.substring(firstColonIndex + 1, firstColonIndex + 1 + length);
-    } else {
-      throw new RuntimeException("Only strings and integers are supported at the moment");
+  private static String bytesToHex(byte[] bytes){
+    StringBuilder sb = new StringBuilder();
+    for (byte b:bytes){
+      sb.append(String.format("%02x",b));
     }
-  }
+          return sb.toString();
+        }
+        static String decodeBencode(String bencodedString) {
+          if (Character.isDigit(bencodedString.charAt(0))) {
+            int firstColonIndex = 0;
+            for (int i = 0; i < bencodedString.length(); i++) {
+              if (bencodedString.charAt(i) == ':') {
+                firstColonIndex = i;
+                break;
+              }
+            }
+            int length =
+                Integer.parseInt(bencodedString.substring(0, firstColonIndex));
+            return bencodedString.substring(firstColonIndex + 1,
+                                            firstColonIndex + 1 + length);
+          } else {
+            throw new RuntimeException(
+                "Only strings are supported at the moment");
+          }
+        }
 
   static long decodeBencodeInt(String bencodedString) {
     if (bencodedString.charAt(0) == 'i') {
@@ -86,15 +105,21 @@ public class Main {
 class Torrent {
   public String announce;
   public long length;
+  public byte[] infoHash;
 
-  public Torrent(byte[] bytes) {
+  public Torrent(byte[] bytes) throws NoSuchAlgorithmException {
     Bencode bencode = new Bencode(false);
-    Map<String, Object> root = bencode.decode(bytes, Type.DICTIONARY);
-    announce = (String) root.get("announce");
+    Bencode bencode2 = new Bencode(true);
 
-    Map<String, Object> info = (Map<String, Object>) root.get("info");
-    if (info != null) {
-      length = (long) info.get("length");
-    }
+    Map<String, Object> root = bencode.decode(bytes, Type.DICTIONARY);
+    Map<String, Object> info = (Map<String, Object>)root.get("info");
+
+    announce = (String)root.get("announce");
+    length = (long)info.get("length");
+
+    MessageDigest digest2 = MessageDigest.getInstance("SHA-1");
+    infoHash = digest2.digest(bencode2.encode(
+        (Map<String, Object>)bencode2.decode(bytes, Type.DICTIONARY)
+            .get("info")));
   }
 }
